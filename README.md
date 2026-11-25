@@ -18,7 +18,7 @@ tba
 tba 
 
 ## Technologies Used 
-tba 
+Python
 
 ## Future Enhancements 
 tba
