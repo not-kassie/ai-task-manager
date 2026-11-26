@@ -1,0 +1,1 @@
+"""Generates rule-based productivity recommendations."""

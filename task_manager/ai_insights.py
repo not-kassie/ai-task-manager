@@ -1,0 +1,1 @@
+"""Requests AI-generated insights from a local Ollama model."""
