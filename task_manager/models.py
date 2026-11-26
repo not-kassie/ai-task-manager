@@ -14,7 +14,7 @@ class Task:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     created_at: datetime = field(default_factory=datetime.now)
 
-    "sets up the task object and validates the input values"
+    """sets up the task object and validates the input values"""
     def __post_init__(self):
         self.title = self.title.strip()
         if not self.title:
