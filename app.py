@@ -140,11 +140,22 @@ class App(ctk.CTk):
         row = ctk.CTkFrame(self.list_frame)
         row.pack(fill="x", pady=4)
 
-        info = ctk.CTkFrame(row, fg_color="transparent")
-        info.pack(side="left", fill="x", expand=True, padx=10, pady=8)
+        checkbox = ctk.CTkCheckBox(
+            row, text="", width=24,
+            command=lambda t=task: self.toggle_complete(t.id))
+        checkbox.pack(side="left", padx=(10, 5), pady=10)
+        if task.completed:
+            checkbox.select()
 
+        info = ctk.CTkFrame(row, fg_color="transparent")
+        info.pack(side="left", fill="x", expand=True, pady=8)
+
+        title_font = ctk.CTkFont(size=15, weight="bold",
+                                 overstrike=task.completed)
         ctk.CTkLabel(info, text=task.title, anchor="w",
-                     font=ctk.CTkFont(size=15, weight="bold")).pack(fill="x")
+                     font=title_font,
+                     text_color="gray" if task.completed else None
+                     ).pack(fill="x")
 
         overdue = not task.completed and task.due_date < date.today()
         details = (f"Due {task.due_date:%b %d, %Y}  •  "
@@ -155,6 +166,14 @@ class App(ctk.CTk):
         ctk.CTkLabel(info, text=details, anchor="w",
                      text_color=RED if overdue else "gray").pack(fill="x")
 
+        ctk.CTkButton(row, text="Delete", width=70,
+                      fg_color=RED, hover_color="#b52b27",
+                      command=lambda t=task: self.delete_task(t)
+                      ).pack(side="right", padx=(5, 10))
+        ctk.CTkButton(row, text="Edit", width=70,
+                      command=lambda t=task: self.open_edit_dialog(t)
+                      ).pack(side="right", padx=5)
+
     # actions 
     def open_add_dialog(self):
         TaskDialog(self, on_save=self.add_task)
@@ -163,6 +182,22 @@ class App(ctk.CTk):
         self.manager.add(Task(**fields))
         self.refresh()
 
+    def open_edit_dialog(self, task: Task):
+        TaskDialog(self, task=task,
+            on_save=lambda fields: self.edit_task(task.id, fields))
+
+    def edit_task(self, task_id: str, fields: dict):
+        self.manager.update(task_id, **fields)
+        self.refresh()
+
+    def toggle_complete(self, task_id: str):
+        self.manager.toggle_complete(task_id)
+        self.after(0, self.refresh)  # let the checkbox finish its click first
+
+    def delete_task(self, task: Task):
+        if messagebox.askyesno("Delete task", f"Delete '{task.title}'?"):
+            self.manager.delete(task.id)
+            self.refresh()
 
 if __name__ == "__main__":
     ctk.set_appearance_mode("system")
