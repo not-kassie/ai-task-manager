@@ -7,8 +7,12 @@ import customtkinter as ctk
 from task_manager.manager import TaskManager
 from task_manager.models import Task
 from task_manager.storage import TaskStorage
+from task_manager.prioritizer import priority_label, priority_score, sort_by_priority
+from task_manager.recommender import generate_recommendations
 
 RED = "#d9534f"
+PRIORITY_COLORS = {"High": RED, "Medium": "#e0a030", "Low": "#5cb85c", "Done": "gray"}
+REC_COLORS = {"focus": "#3b8ed0", "warning": RED, "tip": "#5cb85c", "info": "gray"}
 
 
 class TaskDialog(ctk.CTkToplevel):
@@ -103,11 +107,12 @@ class App(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("AI Task Manager")
-        self.geometry("900x600")
-        self.minsize(700, 450)
+        self.geometry("1100x650")
+        self.minsize(850, 500)
 
         self.manager = TaskManager(TaskStorage())
 
+        # Header
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(fill="x", padx=20, pady=(20, 10))
         ctk.CTkLabel(header, text="AI Task Manager",
@@ -115,13 +120,26 @@ class App(ctk.CTk):
         ctk.CTkButton(header, text="+ Add Task",
                       command=self.open_add_dialog).pack(side="right")
 
-        self.list_frame = ctk.CTkScrollableFrame(self)
-        self.list_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+        # Body: task list on the left, recommendations on the right
+        body = ctk.CTkFrame(self, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+
+        self.list_frame = ctk.CTkScrollableFrame(
+            body, label_text="Tasks (sorted by priority)")
+        self.list_frame.pack(side="left", fill="both", expand=True)
+
+        self.sidebar = ctk.CTkScrollableFrame(
+            body, width=300, label_text="Recommendations")
+        self.sidebar.pack(side="right", fill="y", padx=(10, 0))
 
         self.refresh()
 
-    # display 
+    # ---------- display ----------
     def refresh(self):
+        self._refresh_tasks()
+        self._refresh_recommendations()
+
+    def _refresh_tasks(self):
         for widget in self.list_frame.winfo_children():
             widget.destroy()
 
@@ -131,12 +149,25 @@ class App(ctk.CTk):
                          text_color="gray").pack(pady=40)
             return
 
-        # Incomplete first, then by due date (priority sorting comes Friday)
-        for task in sorted(self.manager.tasks,
-                           key=lambda t: (t.completed, t.due_date)):
-            self._task_row(task)
+        today = date.today()
+        for task in sort_by_priority(self.manager.tasks, today):
+            self._task_row(task, priority_score(task, today))
 
-    def _task_row(self, task: Task):
+    def _refresh_recommendations(self):
+        for widget in self.sidebar.winfo_children():
+            widget.destroy()
+
+        for rec in generate_recommendations(self.manager.tasks):
+            color = REC_COLORS[rec.kind]
+            card = ctk.CTkFrame(self.sidebar, border_width=2, border_color=color)
+            card.pack(fill="x", pady=5)
+            ctk.CTkLabel(card, text=rec.title, anchor="w", text_color=color,
+                         font=ctk.CTkFont(size=14, weight="bold")
+                         ).pack(fill="x", padx=10, pady=(8, 0))
+            ctk.CTkLabel(card, text=rec.message, anchor="w", justify="left",
+                         wraplength=250).pack(fill="x", padx=10, pady=(2, 8))
+
+    def _task_row(self, task: Task, score: float):
         row = ctk.CTkFrame(self.list_frame)
         row.pack(fill="x", pady=4)
 
@@ -147,13 +178,20 @@ class App(ctk.CTk):
         if task.completed:
             checkbox.select()
 
+        # Priority badge
+        label = "Done" if task.completed else priority_label(score)
+        badge_text = label if task.completed else f"{label}\n{score:.0f}"
+        ctk.CTkLabel(row, text=badge_text, width=64, corner_radius=6,
+                     fg_color=PRIORITY_COLORS[label], text_color="white",
+                     font=ctk.CTkFont(size=12, weight="bold")
+                     ).pack(side="left", padx=5, pady=8)
+
         info = ctk.CTkFrame(row, fg_color="transparent")
-        info.pack(side="left", fill="x", expand=True, pady=8)
+        info.pack(side="left", fill="x", expand=True, padx=5, pady=8)
 
         title_font = ctk.CTkFont(size=15, weight="bold",
                                  overstrike=task.completed)
-        ctk.CTkLabel(info, text=task.title, anchor="w",
-                     font=title_font,
+        ctk.CTkLabel(info, text=task.title, anchor="w", font=title_font,
                      text_color="gray" if task.completed else None
                      ).pack(fill="x")
 
@@ -174,7 +212,7 @@ class App(ctk.CTk):
                       command=lambda t=task: self.open_edit_dialog(t)
                       ).pack(side="right", padx=5)
 
-    # actions 
+    # ---------- actions ----------
     def open_add_dialog(self):
         TaskDialog(self, on_save=self.add_task)
 
@@ -184,7 +222,7 @@ class App(ctk.CTk):
 
     def open_edit_dialog(self, task: Task):
         TaskDialog(self, task=task,
-            on_save=lambda fields: self.edit_task(task.id, fields))
+                   on_save=lambda fields: self.edit_task(task.id, fields))
 
     def edit_task(self, task_id: str, fields: dict):
         self.manager.update(task_id, **fields)
@@ -198,6 +236,7 @@ class App(ctk.CTk):
         if messagebox.askyesno("Delete task", f"Delete '{task.title}'?"):
             self.manager.delete(task.id)
             self.refresh()
+
 
 if __name__ == "__main__":
     ctk.set_appearance_mode("system")
